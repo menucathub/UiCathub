@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Chúc Mừng Năm Mới 2025</title>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #000000, #1a0f3c);
+            overflow: hidden;
+            font-family: 'Montserrat', sans-serif;
+            color: #fff;
+            text-align: center;
+        }
+
+        .container {
+            position: relative;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .datetime {
+            font-size: 1.8em;
+            margin: 20px;
+            background: linear-gradient(90deg, #ffd700, #ff6b6b);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+            font-family: 'Montserrat', sans-serif;
+        }
+
+        .year-2025 {
+            font-size: 7em;
+            font-weight: bold;
+            font-family: 'Dancing Script', cursive;
+            background: linear-gradient(90deg, #ff0000, #ffd700, #ff0000);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: shine 2s linear infinite;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+            margin-bottom: 20px;
+        }
+
+        .greeting {
+            font-size: 3.5em;
+            margin: 20px;
+            font-family: 'Dancing Script', cursive;
+            background: linear-gradient(90deg, #ff6b6b, #ffd700, #4ecdc4);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: colorChange 3s infinite;
+        }
+
+        .wishes {
+            font-size: 2em;
+            margin: 20px;
+            line-height: 1.8;
+            font-family: 'Montserrat', sans-serif;
+            opacity: 0;
+            animation: fadeInOut 5s infinite ease-in-out;
+            transform: scale(0.8);
+        }
+
+        @keyframes shine {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 100% 50%; }
+        }
+
+        @keyframes colorChange {
+            0% { filter: hue-rotate(0deg); }
+            100% { filter: hue-rotate(360deg); }
+        }
+
+        @keyframes fadeInOut {
+            0%, 100% { opacity: 0; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="year-2025">2025</div>
+        <div class="datetime" id="datetime"></div>
+        <div class="greeting">CHÚC MỪNG NĂM MỚI</div>
+        <div class="wishes" id="random-wish">Chúc bạn một năm mới an khang, thịnh vượng!</div>
+    </div>
+
+    <script>
+        // Lời chúc ngẫu nhiên
+        const wishes = [
+            "Chúc bạn một năm mới an khang, thịnh vượng!",
+            "Vạn sự như ý, tỉ sự như mơ!",
+            "Hạnh phúc trọn đầy, tiền tài dư giả!",
+            "Chúc sức khỏe dồi dào, năm mới thành công!",
+            "Tình yêu ngọt ngào, may mắn theo sau!",
+            "Chúc một năm mới tràn ngập niềm vui!"
+        ];
+
+        function updateRandomWish() {
+            const randomWish = wishes[Math.floor(Math.random() * wishes.length)];
+            const wishElement = document.getElementById('random-wish');
+            
+            // Hiệu ứng đổi lời chúc
+            wishElement.style.opacity = 0;
+            wishElement.style.transform = 'scale(0.8)';
+            
+            setTimeout(() => {
+                wishElement.textContent = randomWish;
+                wishElement.style.opacity = 1;
+                wishElement.style.transform = 'scale(1)';
+            }, 500);
+        }
+
+        setInterval(updateRandomWish, 5000);
+
+        // Cập nhật thời gian
+        function updateDateTime() {
+            const now = new Date();
+            const options = {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                timeZone: 'Asia/Ho_Chi_Minh'
+            };
+            const dateTimeString = now.toLocaleDateString('vi-VN', options);
+            document.getElementById('datetime').textContent = dateTimeString;
+        }
+        setInterval(updateDateTime, 1000);
+        updateDateTime();
+    </script>
+</body>
+</html>
