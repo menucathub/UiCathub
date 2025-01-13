@@ -1,154 +1,295 @@
 
---[[ Cat Hub Library V2 ]]--
+--[[ Cat Hub Premium Library V2 ]]--
 
-local CatHub = {}
+local CatHub = {
+    Flags = {},
+    Theme = {
+        Primary = Color3.fromRGB(24, 24, 36),
+        Secondary = Color3.fromRGB(32, 32, 48),
+        Accent = Color3.fromRGB(96, 76, 244),
+        TextColor = Color3.fromRGB(255, 255, 255),
+        DarkText = Color3.fromRGB(175, 175, 175),
+        
+        -- UI Elements
+        TopbarColor = Color3.fromRGB(28, 28, 42),
+        SidebarColor = Color3.fromRGB(28, 28, 42),
+        ContainerColor = Color3.fromRGB(32, 32, 48),
+        ElementColor = Color3.fromRGB(36, 36, 54),
+        
+        -- Special Elements
+        SuccessColor = Color3.fromRGB(0, 255, 138),
+        WarningColor = Color3.fromRGB(255, 155, 0),
+        ErrorColor = Color3.fromRGB(255, 0, 68),
+    },
+    Hidden = false,
+}
+
+-- Services
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 
 -- Constants
 local TWEEN_INFO = TweenInfo.new(0.3, Enum.EasingStyle.Quint)
-local CORNER_RADIUS = UDim.new(0, 8)
+local SPRING_INFO = {
+    OPEN = {damping = 12, frequency = 5},
+    CLOSE = {damping = 15, frequency = 6}
+}
 
 -- Utility Functions
-local function Create(className, properties)
+local function Create(className, properties, children)
     local instance = Instance.new(className)
-    for k, v in pairs(properties) do
+    
+    for k, v in pairs(properties or {}) do
         instance[k] = v
     end
+    
+    for _, child in pairs(children or {}) do
+        child.Parent = instance
+    end
+    
     return instance
 end
 
-local function AddCorner(parent)
-    local corner = Create("UICorner", {
-        CornerRadius = CORNER_RADIUS,
-        Parent = parent
+local function AddEffect(button)
+    local effect = Create("Frame", {
+        Name = "Effect",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BackgroundTransparency = 0.8,
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromScale(0, 0),
+    }, {
+        Create("UICorner", {
+            CornerRadius = UDim.new(1, 0)
+        })
     })
-    return corner
+    
+    effect.Parent = button
+    
+    local goal = {}
+    goal.Size = UDim2.fromScale(1.5, 1.5)
+    goal.BackgroundTransparency = 1
+    
+    local tween = TweenService:Create(effect, TweenInfo.new(0.5), goal)
+    tween:Play()
+    
+    tween.Completed:Connect(function()
+        effect:Destroy()
+    end)
 end
 
-local function AddStroke(parent, color)
-    local stroke = Create("UIStroke", {
-        Color = color or Color3.fromRGB(60, 60, 60),
-        Thickness = 1,
-        Parent = parent
-    })
-    return stroke
-end
-
--- Main Window Creator
-function CatHub.new(config)
-    local window = {}
-    
-    -- Default Config
-    config = config or {}
-    config.Title = config.Title or "Cat Hub"
-    config.Theme = config.Theme or "Dark"
-    config.Size = config.Size or UDim2.new(0, 600, 0, 400)
-    
-    -- Theme Colors
-    local theme = {
-        Dark = {
-            Background = Color3.fromRGB(25, 25, 25),
-            Secondary = Color3.fromRGB(35, 35, 35),
-            Accent = Color3.fromRGB(0, 162, 255),
-            Text = Color3.fromRGB(255, 255, 255),
-            DarkText = Color3.fromRGB(175, 175, 175)
-        }
+local function Spring(instance, property, goal, speed, damping, frequency)
+    local spring = {
+        Instance = instance,
+        Property = property,
+        Goal = goal,
+        Speed = speed or 1,
+        Damping = damping or 9,
+        Frequency = frequency or 4
     }
     
-    local colors = theme[config.Theme]
+    local position = instance[property]
+    local velocity = 0
+    
+    RunService:BindToRenderStep(HttpService:GenerateGUID(false), Enum.RenderPriority.Camera.Value, function(delta)
+        local displacement = goal - position
+        local springForce = displacement * spring.Frequency * spring.Frequency
+        local dampingForce = velocity * spring.Damping
+        
+        local acceleration = (springForce - dampingForce) * delta
+        velocity = velocity + acceleration
+        
+        local newPosition = position + velocity * delta * spring.Speed
+        position = newPosition
+        
+        instance[property] = newPosition
+        
+        if math.abs(velocity) < 0.001 and math.abs(displacement) < 0.001 then
+            RunService:UnbindFromRenderStep(HttpService:GenerateGUID(false))
+        end
+    end)
+end
+
+local function AddCorner(instance, radius)
+    return Create("UICorner", {
+        CornerRadius = UDim.new(0, radius or 6),
+        Parent = instance
+    })
+end
+
+local function AddStroke(instance, color, thickness)
+    return Create("UIStroke", {
+        Color = color or CatHub.Theme.Accent,
+        Thickness = thickness or 1,
+        Parent = instance
+    })
+end
+
+local function AddBlur(instance)
+    local blur = Create("BlurEffect", {
+        Size = 0,
+        Parent = game:GetService("Lighting")
+    })
+    
+    local goal = {}
+    goal.Size = 20
+    
+    local tween = TweenService:Create(blur, TWEEN_INFO, goal)
+    tween:Play()
+    
+    return blur
+end
+
+local function RemoveBlur(blur)
+    local goal = {}
+    goal.Size = 0
+    
+    local tween = TweenService:Create(blur, TWEEN_INFO, goal)
+    tween:Play()
+    
+    tween.Completed:Connect(function()
+        blur:Destroy()
+    end)
+end
+
+-- Window Creator
+function CatHub.new(config)
+    config = config or {}
+    config.Title = config.Title or "Cat Hub Premium"
+    config.SubTitle = config.SubTitle or "v2.0"
+    config.Size = config.Size or UDim2.new(0, 700, 0, 500)
     
     -- Create Main GUI
     local ScreenGui = Create("ScreenGui", {
-        Name = "CatHubV2",
-        Parent = CoreGui
+        Name = "CatHubPremium",
+        Parent = CoreGui,
+        ResetOnSpawn = false
     })
     
-    local Main = Create("Frame", {
-        Name = "Main",
+    -- Main Container
+    local Container = Create("Frame", {
+        Name = "Container",
         Size = config.Size,
         Position = UDim2.new(0.5, -config.Size.X.Offset/2, 0.5, -config.Size.Y.Offset/2),
-        BackgroundColor3 = colors.Background,
-        Parent = ScreenGui
+        BackgroundColor3 = CatHub.Theme.ContainerColor,
+        BackgroundTransparency = 0,
+        ClipsDescendants = true,
+    }, {
+        -- Add corner
+        Create("UICorner", {
+            CornerRadius = UDim.new(0, 8)
+        }),
+        
+        -- Add gradient
+        Create("UIGradient", {
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(230, 230, 230))
+            }),
+            Rotation = 45,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.98),
+                NumberSequenceKeypoint.new(1, 0.96)
+            })
+        })
     })
-    AddCorner(Main)
     
-    -- Title Bar
-    local TitleBar = Create("Frame", {
-        Name = "TitleBar",
-        Size = UDim2.new(1, 0, 0, 40),
-        BackgroundColor3 = colors.Secondary,
-        Parent = Main
+    -- Topbar
+    local Topbar = Create("Frame", {
+        Name = "Topbar",
+        Size = UDim2.new(1, 0, 0, 50),
+        BackgroundColor3 = CatHub.Theme.TopbarColor,
+        Parent = Container
+    }, {
+        Create("UICorner", {
+            CornerRadius = UDim.new(0, 8)
+        })
     })
-    AddCorner(TitleBar)
     
+    -- Title
     local Title = Create("TextLabel", {
         Name = "Title",
         Text = config.Title,
-        Size = UDim2.new(1, -20, 1, 0),
-        Position = UDim2.new(0, 10, 0, 0),
+        Size = UDim2.new(0, 200, 1, 0),
+        Position = UDim2.new(0, 15, 0, 0),
         BackgroundTransparency = 1,
-        TextColor3 = colors.Text,
-        TextSize = 18,
+        TextColor3 = CatHub.Theme.TextColor,
+        TextSize = 22,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = TitleBar
+        Parent = Topbar
     })
     
-    -- Tab Container
-    local TabContainer = Create("Frame", {
-        Name = "TabContainer",
-        Size = UDim2.new(0, 140, 1, -40),
-        Position = UDim2.new(0, 0, 0, 40),
-        BackgroundColor3 = colors.Secondary,
-        Parent = Main
-    })
-    
-    local TabList = Create("ScrollingFrame", {
-        Name = "TabList",
-        Size = UDim2.new(1, 0, 1, 0),
+    -- Subtitle
+    local SubTitle = Create("TextLabel", {
+        Name = "SubTitle",
+        Text = config.SubTitle,
+        Size = UDim2.new(0, 100, 1, 0),
+        Position = UDim2.new(0, 220, 0, 0),
         BackgroundTransparency = 1,
-        ScrollBarThickness = 2,
-        Parent = TabContainer
+        TextColor3 = CatHub.Theme.DarkText,
+        TextSize = 16,
+        Font = Enum.Font.Gotham,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Topbar
     })
     
-    local TabListLayout = Create("UIListLayout", {
-        Padding = UDim.new(0, 5),
-        Parent = TabList
+    -- Window Controls
+    local Controls = Create("Frame", {
+        Name = "Controls",
+        Size = UDim2.new(0, 150, 1, 0),
+        Position = UDim2.new(1, -150, 0, 0),
+        BackgroundTransparency = 1,
+        Parent = Topbar
     })
-    
-    -- Content Area
-    local ContentContainer = Create("Frame", {
-        Name = "ContentContainer",
-        Size = UDim2.new(1, -150, 1, -50),
-        Position = UDim2.new(0, 145, 0, 45),
-        BackgroundColor3 = colors.Secondary,
-        Parent = Main
-    })
-    AddCorner(ContentContainer)
-    
+
     -- Tab System
-    local tabs = {}
-    local selectedTab = nil
+    local TabList = {}
+    local SelectedTab = nil
+    
+    local function CreateTabButton(name)
+        local TabButton = Create("TextButton", {
+            Name = name.."Button",
+            Size = UDim2.new(1, -10, 0, 40),
+            Position = UDim2.new(0, 5, 0, #TabList * 45),
+            BackgroundColor3 = CatHub.Theme.ElementColor,
+            Text = name,
+            TextColor3 = CatHub.Theme.TextColor,
+            TextSize = 14,
+            Font = Enum.Font.GothamBold,
+            AutoButtonColor = false,
+            Parent = TabContainer
+        })
+        
+        AddCorner(TabButton, 6)
+        
+        -- Indicator
+        local Indicator = Create("Frame", {
+            Name = "Indicator",
+            Size = UDim2.new(0, 3, 0.8, 0),
+            Position = UDim2.new(0, 0, 0.1, 0),
+            BackgroundColor3 = CatHub.Theme.Accent,
+            BackgroundTransparency = 1,
+            Parent = TabButton
+        })
+        
+        AddCorner(Indicator, 4)
+        
+        return TabButton
+    end
     
     -- Window Methods
-    function window:AddTab(name, icon)
-        local tab = {}
+    local Window = {}
+    
+    function Window:AddTab(name)
+        local Tab = {}
         
         -- Create Tab Button
-        local TabButton = Create("TextButton", {
-            Name = name,
-            Size = UDim2.new(1, -10, 0, 35),
-            Position = UDim2.new(0, 5, 0, #tabs * 40),
-            BackgroundColor3 = colors.Secondary,
-            Text = name,
-            TextColor3 = colors.Text,
-            TextSize = 14,
-            Font = Enum.Font.Gotham,
-            Parent = TabList
-        })
-        AddCorner(TabButton)
+        local TabButton = CreateTabButton(name)
         
         -- Create Tab Content
         local TabContent = Create("ScrollingFrame", {
@@ -157,191 +298,196 @@ function CatHub.new(config)
             Position = UDim2.new(0, 10, 0, 10),
             BackgroundTransparency = 1,
             ScrollBarThickness = 2,
+            ScrollBarImageColor3 = CatHub.Theme.Accent,
             Visible = false,
-            Parent = ContentContainer
+            Parent = ContentArea
         })
         
-        local ContentLayout = Create("UIListLayout", {
+        local UIListLayout = Create("UIListLayout", {
             Padding = UDim.new(0, 10),
             Parent = TabContent
         })
         
-        -- Tab Selection Logic
+        -- Tab Selection
         TabButton.MouseButton1Click:Connect(function()
-            if selectedTab then
-                selectedTab.Content.Visible = false
-                TweenService:Create(selectedTab.Button, TWEEN_INFO, {
-                    BackgroundColor3 = colors.Secondary
+            if SelectedTab then
+                -- Deselect old tab
+                TweenService:Create(SelectedTab.Button, TWEEN_INFO, {
+                    BackgroundColor3 = CatHub.Theme.ElementColor
                 }):Play()
+                
+                TweenService:Create(SelectedTab.Button.Indicator, TWEEN_INFO, {
+                    BackgroundTransparency = 1
+                }):Play()
+                
+                SelectedTab.Content.Visible = false
             end
             
-            selectedTab = {
+            -- Select new tab
+            SelectedTab = {
                 Button = TabButton,
                 Content = TabContent
             }
             
-            TabContent.Visible = true
             TweenService:Create(TabButton, TWEEN_INFO, {
-                BackgroundColor3 = colors.Accent
+                BackgroundColor3 = CatHub.Theme.Accent
             }):Play()
+            
+            TweenService:Create(TabButton.Indicator, TWEEN_INFO, {
+                BackgroundTransparency = 0
+            }):Play()
+            
+            TabContent.Visible = true
+            AddRippleEffect(TabButton)
         end)
         
-        -- Tab Component Methods
-        function tab:AddButton(text, callback)
+        -- Element Creation Methods
+        function Tab:AddButton(text, callback)
             local Button = Create("TextButton", {
-                Name = "Button",
-                Size = UDim2.new(1, 0, 0, 35),
-                BackgroundColor3 = colors.Secondary,
+                Name = text.."Button",
+                Size = UDim2.new(1, 0, 0, 40),
+                BackgroundColor3 = CatHub.Theme.ElementColor,
                 Text = text,
-                TextColor3 = colors.Text,
+                TextColor3 = CatHub.Theme.TextColor,
                 TextSize = 14,
-                Font = Enum.Font.Gotham,
+                Font = Enum.Font.GothamBold,
+                AutoButtonColor = false,
                 Parent = TabContent
             })
-            AddCorner(Button)
             
-            Button.MouseButton1Click:Connect(callback)
+            AddCorner(Button, 6)
+            
+            Button.MouseButton1Click:Connect(function()
+                AddRippleEffect(Button)
+                if callback then callback() end
+            end)
+            
             return Button
         end
         
-        function tab:AddToggle(text, default, callback)
+        function Tab:AddToggle(text, default, callback)
             local toggle = {Value = default or false}
             
             local Toggle = Create("Frame", {
-                Name = "Toggle",
-                Size = UDim2.new(1, 0, 0, 35),
-                BackgroundColor3 = colors.Secondary,
+                Name = text.."Toggle",
+                Size = UDim2.new(1, 0, 0, 40),
+                BackgroundColor3 = CatHub.Theme.ElementColor,
                 Parent = TabContent
             })
-            AddCorner(Toggle)
+            
+            AddCorner(Toggle, 6)
             
             local Title = Create("TextLabel", {
                 Text = text,
                 Size = UDim2.new(1, -60, 1, 0),
                 Position = UDim2.new(0, 10, 0, 0),
                 BackgroundTransparency = 1,
-                TextColor3 = colors.Text,
+                TextColor3 = CatHub.Theme.TextColor,
                 TextSize = 14,
-                Font = Enum.Font.Gotham,
+                Font = Enum.Font.GothamBold,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Parent = Toggle
             })
             
-            local ToggleButton = Create("Frame", {
+            local Switch = Create("Frame", {
                 Size = UDim2.new(0, 40, 0, 20),
                 Position = UDim2.new(1, -50, 0.5, -10),
-                BackgroundColor3 = toggle.Value and colors.Accent or colors.Background,
+                BackgroundColor3 = toggle.Value and CatHub.Theme.Accent or CatHub.Theme.ElementColor,
                 Parent = Toggle
             })
-            AddCorner(ToggleButton)
             
-            local ToggleCircle = Create("Frame", {
+            AddCorner(Switch, 999)
+            
+            local Knob = Create("Frame", {
                 Size = UDim2.new(0, 16, 0, 16),
                 Position = UDim2.new(toggle.Value and 1 or 0, toggle.Value and -18 or 2, 0.5, -8),
-                BackgroundColor3 = colors.Text,
-                Parent = ToggleButton
+                BackgroundColor3 = CatHub.Theme.TextColor,
+                Parent = Switch
             })
-            AddCorner(ToggleCircle)
+            
+            AddCorner(Knob, 999)
             
             Toggle.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
                     toggle.Value = not toggle.Value
                     
-                    TweenService:Create(ToggleButton, TWEEN_INFO, {
-                        BackgroundColor3 = toggle.Value and colors.Accent or colors.Background
+                    TweenService:Create(Switch, TWEEN_INFO, {
+                        BackgroundColor3 = toggle.Value and CatHub.Theme.Accent or CatHub.Theme.ElementColor
                     }):Play()
                     
-                    TweenService:Create(ToggleCircle, TWEEN_INFO, {
+                    TweenService:Create(Knob, TWEEN_INFO, {
                         Position = UDim2.new(toggle.Value and 1 or 0, toggle.Value and -18 or 2, 0.5, -8)
                     }):Play()
                     
-                    if callback then
-                        callback(toggle.Value)
-                    end
+                    AddRippleEffect(Toggle)
+                    if callback then callback(toggle.Value) end
                 end
             end)
             
             return toggle
         end
         
-        function tab:AddSlider(text, config)
-            config = config or {}
+        function Tab:AddSlider(text, config)
+            local slider = {Value = config.default or config.min}
             config.min = config.min or 0
             config.max = config.max or 100
-            config.default = config.default or config.min
-            
-            local slider = {Value = config.default}
+            config.increment = config.increment or 1
             
             local Slider = Create("Frame", {
-                Name = "Slider",
+                Name = text.."Slider",
                 Size = UDim2.new(1, 0, 0, 50),
-                BackgroundColor3 = colors.Secondary,
+                BackgroundColor3 = CatHub.Theme.ElementColor,
                 Parent = TabContent
             })
-            AddCorner(Slider)
+            
+            AddCorner(Slider, 6)
             
             local Title = Create("TextLabel", {
                 Text = text,
                 Size = UDim2.new(1, -20, 0, 20),
-                Position = UDim2.new(0, 10, 0, 0),
+                Position = UDim2.new(0, 10, 0, 5),
                 BackgroundTransparency = 1,
-                TextColor3 = colors.Text,
+                TextColor3 = CatHub.Theme.TextColor,
                 TextSize = 14,
-                Font = Enum.Font.Gotham,
+                Font = Enum.Font.GothamBold,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Parent = Slider
             })
             
-            local SliderBar = Create("Frame", {
-                Size = UDim2.new(1, -20, 0, 4),
-                Position = UDim2.new(0, 10, 0.5, 10),
-                BackgroundColor3 = colors.Background,
-                Parent = Slider
-            })
-            AddCorner(SliderBar)
-            
-            local SliderFill = Create("Frame", {
-                Size = UDim2.new((slider.Value - config.min)/(config.max - config.min), 0, 1, 0),
-                BackgroundColor3 = colors.Accent,
-                Parent = SliderBar
-            })
-            AddCorner(SliderFill)
-            
-            local ValueLabel = Create("TextLabel", {
-                Text = tostring(slider.Value),
+            local Value = Create("TextLabel", {
+                Text = slider.Value,
                 Size = UDim2.new(0, 50, 0, 20),
-                Position = UDim2.new(1, -60, 0, 0),
+                Position = UDim2.new(1, -60, 0, 5),
                 BackgroundTransparency = 1,
-                TextColor3 = colors.Text,
+                TextColor3 = CatHub.Theme.DarkText,
                 TextSize = 14,
                 Font = Enum.Font.GothamBold,
                 Parent = Slider
             })
             
-            local function updateSlider(input)
-                local pos = math.clamp((input.Position.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1)
-                slider.Value = math.floor(pos * (config.max - config.min) + config.min)
-                
-                SliderFill.Size = UDim2.new(pos, 0, 1, 0)
-                ValueLabel.Text = tostring(slider.Value)
-                
-                if config.callback then
-                    config.callback(slider.Value)
-                end
-            end
+            local SliderBar = Create("Frame", {
+                Size = UDim2.new(1, -20, 0, 4),
+                Position = UDim2.new(0, 10, 0, 35),
+                BackgroundColor3 = CatHub.Theme.Secondary,
+                Parent = Slider
+            })
             
+            AddCorner(SliderBar, 999)
+            
+            local Fill = Create("Frame", {
+                Size = UDim2.new((slider.Value - config.min)/(config.max - config.min), 0, 1, 0),
+                BackgroundColor3 = CatHub.Theme.Accent,
+                Parent = SliderBar
+            })
+            
+            AddCorner(Fill, 999)
+            
+            -- Slider Functionality
             local dragging = false
             
             SliderBar.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
                     dragging = true
-                    updateSlider(input)
-                end
-            end)
-            
-            UserInputService.InputChanged:Connect(function(input)
-                if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-                    updateSlider(input)
                 end
             end)
             
@@ -351,235 +497,102 @@ function CatHub.new(config)
                 end
             end)
             
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                    local pos = math.clamp((input.Position.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1)
+                    local value = math.floor((pos * (config.max - config.min) + config.min) / config.increment) * config.increment
+                    
+                    slider.Value = value
+                    Value.Text = tostring(value)
+                    
+                    TweenService:Create(Fill, TWEEN_INFO, {
+                        Size = UDim2.new(pos, 0, 1, 0)
+                    }):Play()
+                    
+                    if config.callback then config.callback(value) end
+                end
+            end)
+            
             return slider
         end
         
-        function tab:AddDropdown(text, options, callback)
-            local dropdown = {Value = options[1]}
-            
-            local Dropdown = Create("Frame", {
-                Name = "Dropdown",
-                Size = UDim2.new(1, 0, 0, 35),
-                BackgroundColor3 = colors.Secondary,
-                Parent = TabContent
-            })
-            AddCorner(Dropdown)
-            
-            local Title = Create("TextLabel", {
-                Text = text,
-                Size = UDim2.new(1, -160, 1, 0),
-                Position = UDim2.new(0, 10, 0, 0),
-                BackgroundTransparency = 1,
-                TextColor3 = colors.Text,
-                TextSize = 14,
-                Font = Enum.Font.Gotham,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                Parent = Dropdown
-            })
-            
-            local DropButton = Create("TextButton", {
-                Size = UDim2.new(0, 140, 0, 25),
-                Position = UDim2.new(1, -150, 0.5, -12),
-                BackgroundColor3 = colors.Background,
-                Text = dropdown.Value,
-                TextColor3 = colors.Text,
-                TextSize = 14,
-                Font = Enum.Font.Gotham,
-                Parent = Dropdown
-            })
-            AddCorner(DropButton)
-            
-            local OptionList = Create("Frame", {
-                Size = UDim2.new(0, 140, 0, #options * 25),
-                Position = UDim2.new(1, -150, 1, 5),
-                BackgroundColor3 = colors.Background,
-                Visible = false,
-                ZIndex = 2,
-                Parent = Dropdown
-            })
-            AddCorner(OptionList)
-            
-            for i, option in ipairs(options) do
-                local Option = Create("TextButton", {
-                    Size = UDim2.new(1, 0, 0, 25),
-                    Position = UDim2.new(0, 0, 0, (i-1) * 25),
-                    BackgroundTransparency = 1,
-                    Text = option,
-                    TextColor3 = colors.Text,
-                    TextSize = 14,
-                    Font = Enum.Font.Gotham,
-                    Parent = OptionList
-                })
-                
-                Option.MouseButton1Click:Connect(function()
-                    
-                    dropdown.Value = option
-                    DropButton.Text = option
-                    OptionList.Visible = false
-                    
-                    if callback then
-                        callback(option)
-                    end
-                end)
-            end
-            
-            DropButton.MouseButton1Click:Connect(function()
-                OptionList.Visible = not OptionList.Visible
-            end)
-            
-            return dropdown
+        table.insert(TabList, Tab)
+        
+        -- Select first tab
+        if #TabList == 1 then
+            TabButton.MouseButton1Click:Fire()
         end
         
-        function tab:AddColorPicker(text, default, callback)
-            local colorpicker = {Value = default or Color3.fromRGB(255, 255, 255)}
-            
-            local ColorPicker = Create("Frame", {
-                Name = "ColorPicker",
-                Size = UDim2.new(1, 0, 0, 35),
-                BackgroundColor3 = colors.Secondary,
-                Parent = TabContent
-            })
-            AddCorner(ColorPicker)
-            
-            local Title = Create("TextLabel", {
-                Text = text,
-                Size = UDim2.new(1, -60, 1, 0),
-                Position = UDim2.new(0, 10, 0, 0),
-                BackgroundTransparency = 1,
-                TextColor3 = colors.Text,
-                TextSize = 14,
-                Font = Enum.Font.Gotham,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                Parent = ColorPicker
-            })
-            
-            local ColorDisplay = Create("TextButton", {
-                Size = UDim2.new(0, 30, 0, 30),
-                Position = UDim2.new(1, -40, 0.5, -15),
-                BackgroundColor3 = colorpicker.Value,
-                Parent = ColorPicker
-            })
-            AddCorner(ColorDisplay)
-            
-            local ColorWheel = Create("ImageButton", {
-                Size = UDim2.new(0, 200, 0, 200),
-                Position = UDim2.new(1, 10, 0, 0),
-                Image = "rbxassetid://4155801252",
-                Visible = false,
-                ZIndex = 2,
-                Parent = ColorPicker
-            })
-            
-            ColorDisplay.MouseButton1Click:Connect(function()
-                ColorWheel.Visible = not ColorWheel.Visible
-            end)
-            
-            ColorWheel.MouseButton1Down:Connect(function(input)
-                local relativeX = (input.Position.X - ColorWheel.AbsolutePosition.X) / ColorWheel.AbsoluteSize.X
-                local relativeY = (input.Position.Y - ColorWheel.AbsolutePosition.Y) / ColorWheel.AbsoluteSize.Y
-                
-                colorpicker.Value = Color3.fromHSV(relativeX, relativeY, 1)
-                ColorDisplay.BackgroundColor3 = colorpicker.Value
-                
-                if callback then
-                    callback(colorpicker.Value)
-                end
-            end)
-            
-            return colorpicker
-        end
-        
-        function tab:AddTextbox(text, placeholder, callback)
-            local Textbox = Create("Frame", {
-                Name = "Textbox",
-                Size = UDim2.new(1, 0, 0, 35),
-                BackgroundColor3 = colors.Secondary,
-                Parent = TabContent
-            })
-            AddCorner(Textbox)
-            
-            local Title = Create("TextLabel", {
-                Text = text,
-                Size = UDim2.new(1, -160, 1, 0),
-                Position = UDim2.new(0, 10, 0, 0),
-                BackgroundTransparency = 1,
-                TextColor3 = colors.Text,
-                TextSize = 14,
-                Font = Enum.Font.Gotham,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                Parent = Textbox
-            })
-            
-            local Input = Create("TextBox", {
-                Size = UDim2.new(0, 140, 0, 25),
-                Position = UDim2.new(1, -150, 0.5, -12),
-                BackgroundColor3 = colors.Background,
-                PlaceholderText = placeholder,
-                Text = "",
-                TextColor3 = colors.Text,
-                PlaceholderColor3 = colors.DarkText,
-                TextSize = 14,
-                Font = Enum.Font.Gotham,
-                Parent = Textbox
-            })
-            AddCorner(Input)
-            
-            Input.FocusLost:Connect(function(enterPressed)
-                if enterPressed and callback then
-                    callback(Input.Text)
-                end
-            end)
-        end
-        
-        function tab:AddLabel(text)
-            local Label = Create("TextLabel", {
-                Text = text,
-                Size = UDim2.new(1, 0, 0, 25),
-                BackgroundTransparency = 1,
-                TextColor3 = colors.Text,
-                TextSize = 14,
-                Font = Enum.Font.Gotham,
-                Parent = TabContent
-            })
-            return Label
-        end
-        
-        -- Select first tab by default
-        if #tabs == 0 then
-            TabButton.BackgroundColor3 = colors.Accent
-            TabContent.Visible = true
-            selectedTab = {
-                Button = TabButton,
-                Content = TabContent
-            }
-        end
-        
-        table.insert(tabs, tab)
-        return tab
+        return Tab
     end
+    
+    -- Control Button Functionality
+    local minimized = false
+    local maximized = false
+    local originalSize = config.Size
+    local originalPos = Container.Position
+    
+    MinimizeBtn.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        
+        TweenService:Create(Container, TWEEN_INFO, {
+            Size = minimized and UDim2.new(0, config.Size.X.Offset, 0, 50) or config.Size
+        }):Play()
+        
+        ContentArea.Visible = not minimized
+        Sidebar.Visible = not minimized
+        AddRippleEffect(MinimizeBtn)
+    end)
+    
+    MaximizeBtn.MouseButton1Click:Connect(function()
+        maximized = not maximized
+        
+        if maximized then
+            originalSize = Container.Size
+            originalPos = Container.Position
+            
+            TweenService:Create(Container, TWEEN_INFO, {
+                Size = UDim2.new(1, -10, 1, -10),
+                Position = UDim2.new(0, 5, 0, 5)
+            }):Play()
+        else
+            TweenService:Create(Container, TWEEN_INFO, {
+                Size = originalSize,
+                Position = originalPos
+            }):Play()
+        end
+        
+        AddRippleEffect(MaximizeBtn)
+    end)
+    
+    CloseBtn.MouseButton1Click:Connect(function()
+        AddRippleEffect(CloseBtn)
+        TweenService:Create(Container, TWEEN_INFO, {
+            Size = UDim2.new(0, Container.Size.X.Offset, 0, 0),
+            Position = UDim2.new(Container.Position.X.Scale, Container.Position.X.Offset, 
+                Container.Position.Y.Scale, Container.Position.Y.Offset + Container.Size.Y.Offset/2)
+        }):Play()
+        wait(0.3)
+        ScreenGui:Destroy()
+    end)
     
     -- Make window draggable
     local dragging = false
-    local dragStart = nil
-    local startPos = nil
+    local dragInput, dragStart, startPos
     
-    TitleBar.InputBegan:Connect(function(input)
+    Topbar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             dragStart = input.Position
-            startPos = Main.Position
+            startPos = Container.Position
         end
     end)
     
     UserInputService.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
             local delta = input.Position - dragStart
-            Main.Position = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
+            Container.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, 
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
     
@@ -589,8 +602,7 @@ function CatHub.new(config)
         end
     end)
     
-    -- Return window
-    return window
+    return Window
 end
 
 return CatHub
